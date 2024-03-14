@@ -2,7 +2,7 @@ import time
 from datetime import datetime, timedelta
 
 from flask import request, url_for
-from flask_login import current_user, login_user
+from flask_login import current_user, login_user, logout_user
 
 import pytest
 
@@ -368,3 +368,38 @@ def test_unauthenticated_user_redirected_on_comment_submit(client, post):
     assert response.status_code == 302
     assert url_for('login') in response.headers['Location']
     
+def test_up_vote_success(client, user, post):
+    login_response = client.post(url_for('login'), data={
+        'username': user.username,
+        'password': 'testpassword'
+    }, follow_redirects=True)
+
+    assert login_response.status_code == 200
+    upvote_response = client.get(url_for('up_vote', post_id=post.id), follow_redirects=True)
+    assert upvote_response.status_code == 200, "The response should indicate a successful redirect after upvoting."
+    log_entry = ActivityLog.query.filter_by(details=f"Up Vote: {post}").first()
+    assert log_entry is not None, "An ActivityLog entry should be created for the upvote action."
+
+def test_up_vote_unauthenticated_redirect_to_login(client, post):
+    upvote_response = client.get(url_for('up_vote', post_id=post.id), follow_redirects=False)
+
+    assert upvote_response.status_code == 302, "Unauthenticated user should be redirected."
+
+    assert url_for('login') in upvote_response.headers['Location'], "The redirect should be to the login page."
+
+def test_down_vote_success(client, user, post):
+    login_response = client.post(url_for('login'), data={
+        'username': user.username,
+        'password': 'testpassword' 
+    }, follow_redirects=True)
+
+    assert login_response.status_code == 200
+    downvote_response = client.get(url_for('down_vote', post_id=post.id), follow_redirects=True)
+    assert downvote_response.status_code == 200, "The response should indicate a successful redirect after downvoting."
+    log_entry = ActivityLog.query.filter_by(details=f"Down Vote: {post}").first()
+    assert log_entry is not None, "An ActivityLog entry should be created for the downvote action."
+
+def test_down_vote_unauthenticated_redirect_to_login(client, post):
+    downvote_response = client.get(url_for('down_vote', post_id=post.id), follow_redirects=False)
+    assert downvote_response.status_code == 302, "Unauthenticated user should be redirected."
+    assert url_for('login') in downvote_response.headers['Location'], "The redirect should be to the login page."
