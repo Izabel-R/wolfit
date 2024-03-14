@@ -3,13 +3,14 @@
 export WOLFIT_SETTINGS=$(pwd)/test.settings
 export FLASK_ENV=test
 export FLASK_DEBUG=0
+
 coverage run --source "." --omit app/commands.py -m pytest
 coverage html
-open htmlcov/index.html
 
-set -e
-if grep -qEi "(Microsoft|WSL)" /proc/version &> /dev/null ; then
-        sensible-browser htmlcov/index.html
+if command -v xdg-open > /dev/null; then
+    xdg-open htmlcov/index.html
+elif command -v start > /dev/null; then
+    start htmlcov/index.html
 else
-        open htmlcov/index.html
+    echo "Coverage report available at $(pwd)/htmlcov/index.html"
 fi
