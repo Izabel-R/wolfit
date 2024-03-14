@@ -1,12 +1,15 @@
 import time
 from datetime import datetime, timedelta
 
-from flask import url_for
+from flask import request, url_for
+from flask_login import current_user, login_user
 
 import pytest
 
 from app import app, db
 from app.models import ActivityLog, Category, Comment, Post, User
+
+from werkzeug.datastructures import MultiDict
 
 PASSWORD = "yoko"
 
@@ -151,7 +154,6 @@ def test_profile_should_show_posts_for_that_user(
 
 
 def test_last_seen_should_update_automatically_when_login(client, test_user):
-    # Load the user up and force the last seen info to last week
     test_user.last_seen = test_user.last_seen - timedelta(days=7)
     db.session.add(test_user)
     db.session.commit()
@@ -159,7 +161,6 @@ def test_last_seen_should_update_automatically_when_login(client, test_user):
     login(client, test_user.username, PASSWORD)
     response = client.get(url_for("user", username=test_user.username))
     assert b"Last seen" in response.data
-    # And since we just logged in, it should reflect today
     assert datetime.utcnow().strftime("%Y-%m-%d").encode() in response.data
 
 
@@ -192,7 +193,6 @@ def test_single_post_should_have_link_to_voting(client, test_user, single_post):
         in response.data
     )
 
-
 def test_should_be_a_category_page_that_shows_posts(
     client, test_user, single_post, default_category, random_post
 ):
@@ -204,11 +204,9 @@ def test_should_be_a_category_page_that_shows_posts(
         in response.data
     )
 
-
 def test_comments_are_shown_after_post(client, test_user, single_post_with_comment):
     response = client.get(url_for("post", post_id=single_post_with_comment.id))
     assert single_post_with_comment.comments[0].body.encode() in response.data
-
 
 def test_number_of_comments_for_posts_shown_on_list(client, test_user, single_post):
     single_post.add_comment("Important insight!", test_user)
@@ -297,3 +295,76 @@ def test_link_posts_should_have_link_to_url(client, test_user):
     db.session.commit()
     response = client.get(url_for("post", post_id=link_post.id))
     assert link_post.url.encode() in response.data
+
+@pytest.fixture
+def user():
+    user = User(username='testuser', email='test@example.com')
+    user.set_password('testpassword')
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+def test_create_post_redirects_when_not_authenticated(client):
+    response = client.get(url_for('create_post'), follow_redirects=False)
+    assert response.status_code == 302
+    assert url_for('register') in response.headers['Location']
+
+@pytest.fixture
+def post(user):
+    post = Post(title='Test Post', body='Test Content', author=user)
+    db.session.add(post)
+    db.session.commit()
+    return post
+
+def test_comment_posting_by_user(client, user, post):
+    login_response = client.post(url_for('login'), data={
+        'username': user.username,
+        'password': 'testpassword'
+    }, follow_redirects=True)
+
+    assert login_response.status_code == 200
+    comment_response = client.post(url_for('post', post_id=post.id), data={
+        'comment_body': 'This is a test comment'
+    }, follow_redirects=True)
+
+    assert b'Your comment is now live!' in comment_response.data
+    assert request.path == url_for('post', post_id=post.id)
+
+@pytest.fixture
+def authenticated_user(client, user):
+    with client.session_transaction() as session:
+        session['user_id'] = user.id 
+        session['_fresh'] = True 
+    return user
+
+def test_register_route_redirects_when_authenticated(client, user):
+    client.post(url_for('login'), data=dict(
+        username=user.username,
+        password='password' 
+    ), follow_redirects=True)
+    response = client.get(url_for('register'), follow_redirects=False)
+    assert response.status_code == 302
+    assert url_for('index') in response.headers['Location']
+
+
+def test_register_route_redirects_when_authenticated(client, user):
+    user.set_password('password') 
+    db.session.commit()
+
+    login_response = login(client, user.username, 'password')
+    assert login_response.status_code == 200
+    response = client.get(url_for('register'), follow_redirects=False)
+    assert response.status_code == 302, "Authenticated user should be redirected from the register route."
+    assert url_for('index') in response.headers['Location']
+
+def test_register_route_accessible_when_not_authenticated(client):
+    response = client.get(url_for('register'), follow_redirects=False)
+    assert response.status_code == 200
+    assert b'Register' in response.data
+    
+def test_unauthenticated_user_redirected_on_comment_submit(client, post):
+    form_data = MultiDict([('body', 'Test comment')])
+    response = client.post(url_for('post', post_id=post.id), data=form_data, follow_redirects=False)
+    assert response.status_code == 302
+    assert url_for('login') in response.headers['Location']
+    
