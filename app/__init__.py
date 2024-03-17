@@ -18,5 +18,6 @@ db = SQLAlchemy(app)
 login = LoginManager(app)
 migrate = Migrate(app, db)
 bootstrap = Bootstrap(app)
+microservice_url = os.getenv("ACTIVITY_LOG_URL", "http://localhost:5000/api/activities")
 
 from app import models, routes
