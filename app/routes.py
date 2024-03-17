@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from app import app, db
+
 from app.forms import CommentForm, LoginForm, PostForm, RegistrationForm
 from app.models import ActivityLog, Category, Comment, Post, User
 
@@ -106,6 +107,7 @@ def create_post():
         db.session.add(post)
         db.session.commit()
         log_activity_to_microservice(current_user.id, f"Create: {post}")
+
         flash("Your post is now live!")
         return redirect(url_for("index"))
     return render_template(
