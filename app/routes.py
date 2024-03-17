@@ -4,7 +4,7 @@ from flask import flash, redirect, render_template, request, url_for
 
 from flask_login import current_user, login_required, login_user, logout_user
 
-from app import app, db
+from app import app, mongo
 from app.forms import CommentForm, LoginForm, PostForm, RegistrationForm
 from app.models import ActivityLog, Category, Comment, Post, User
 
@@ -20,7 +20,7 @@ def greeting_name():
 def before_request():
     if current_user.is_authenticated:
         current_user.last_seen = datetime.utcnow()
-        db.session.commit()
+        mongo.db.session.commit()
 
 
 @app.route("/")
@@ -76,8 +76,8 @@ def create_post():
     categories = Category.query.order_by("title")
     if categories.count() == 0:
         category = Category(title="default")
-        db.session.add(category)
-        db.session.commit()
+        mongo.db.session.add(category)
+        mongo.db.session.commit()
         categories = Category.query.order_by("title")
     form.category_id.choices = [
         (c.id, c.title) for c in categories
@@ -93,8 +93,8 @@ def create_post():
             category_id=form.category_id.data,
             author=current_user,
         )
-        db.session.add(post)
-        db.session.commit()
+        mongo.db.session.add(post)
+        mongo.db.session.commit()
         ActivityLog.log_event(current_user.id, f"Create: {post}")
         flash("Your post is now live!")
         return redirect(url_for("index"))
@@ -114,8 +114,8 @@ def register():
     if form.validate_on_submit():
         user = User(username=form.username.data, email=form.email.data)
         user.set_password(form.password.data)
-        db.session.add(user)
-        db.session.commit()
+        mongo.db.session.add(user)
+        mongo.db.session.commit()
         ActivityLog.log_event(user.id, "Register")
         flash("Congratulations, you are now a registered user!")
         return redirect(url_for("login"))

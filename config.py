@@ -1,16 +1,8 @@
 import os
 
-
 class Config(object):
-
-    @classmethod
-    def DATABASE_URI(cls, app):
-        db_path = os.path.join(os.path.dirname(__file__),
-                               app.config['BLOG_DATABASE_NAME'])
-        db_uri = f"sqlite:///{db_path}"
-        return db_uri
-
     DEBUG = False
     TESTING = False
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    POSTS_PER_PAGE = 10
+    MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/api/activities')
+    MICROSERVICE_BASE_URL = os.getenv('MICROSERVICE_BASE_URL', 'http://0.0.0.0:5001')
+

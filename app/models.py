@@ -6,41 +6,41 @@ import markdown
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from app import db, login
+from app import mongo, login
 from app.helpers import pretty_date
 
-user_vote = db.Table(
+user_vote = mongo.mongo.db.Table(
     "user_vote",
-    db.Column("user.id", db.Integer, db.ForeignKey("user.id"), primary_key=True),
-    db.Column("post.id", db.Integer, db.ForeignKey("post.id"), primary_key=True),
+    mongo.db.Column("user.id", mongo.db.Integer, mongo.db.ForeignKey("user.id"), primary_key=True),
+    mongo.db.Column("post.id", mongo.db.Integer, mongo.db.ForeignKey("post.id"), primary_key=True),
 )
 
-comment_vote = db.Table(
+comment_vote = mongo.db.Table(
     "comment_vote",
-    db.Column("user.id", db.Integer, db.ForeignKey("user.id"), primary_key=True),
-    db.Column("comment.id", db.Integer, db.ForeignKey("comment.id"), primary_key=True),
+    mongo.db.Column("user.id", mongo.db.Integer, mongo.db.ForeignKey("user.id"), primary_key=True),
+    mongo.db.Column("comment.id", mongo.db.Integer, mongo.db.ForeignKey("comment.id"), primary_key=True),
 )
 
 
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), index=True, unique=True)
-    email = db.Column(db.String(120), index=True, unique=True)
-    password_hash = db.Column(db.String(128))
-    posts = db.relationship(
+class User(UserMixin, mongo.db.Model):
+    id = mongo.db.Column(mongo.db.Integer, primary_key=True)
+    username = mongo.db.Column(mongo.db.String(64), index=True, unique=True)
+    email = mongo.db.Column(mongo.db.String(120), index=True, unique=True)
+    password_hash = mongo.db.Column(mongo.db.String(128))
+    posts = mongo.db.relationship(
         "Post", order_by="desc(Post.timestamp)", backref="author", lazy="dynamic"
     )
-    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
-    post_votes = db.relationship(
+    last_seen = mongo.db.Column(mongo.db.DateTime, default=datetime.utcnow)
+    post_votes = mongo.db.relationship(
         "Post", secondary=user_vote, back_populates="user_votes"
     )
-    comments = db.relationship(
+    comments = mongo.db.relationship(
         "Comment",
         order_by="desc(Comment.timestamp)",
         backref="author",
         lazy="dynamic"
     )
-    comment_votes = db.relationship(
+    comment_votes = mongo.db.relationship(
         "Comment", secondary=comment_vote, back_populates="user_votes"
     )
 
@@ -54,20 +54,20 @@ class User(UserMixin, db.Model):
         return f"<User id {self.id} - {self.username}>"
 
 
-class Post(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(256))
-    body = db.Column(db.Text)
-    link = db.Column(db.Boolean, default=False)
-    url = db.Column(db.String(256))
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
-    category_id = db.Column(db.Integer, db.ForeignKey("category.id"))
-    vote_count = db.Column(db.Integer, default=0)
-    user_votes = db.relationship(
+class Post(mongo.db.Model):
+    id = mongo.db.Column(mongo.db.Integer, primary_key=True)
+    title = mongo.db.Column(mongo.db.String(256))
+    body = mongo.db.Column(mongo.db.Text)
+    link = mongo.db.Column(mongo.db.Boolean, default=False)
+    url = mongo.db.Column(mongo.db.String(256))
+    timestamp = mongo.db.Column(mongo.db.DateTime, index=True, default=datetime.utcnow)
+    user_id = mongo.db.Column(mongo.db.Integer, mongo.db.ForeignKey("user.id"))
+    category_id = mongo.db.Column(mongo.db.Integer, mongo.db.ForeignKey("category.id"))
+    vote_count = mongo.db.Column(mongo.db.Integer, default=0)
+    user_votes = mongo.db.relationship(
         "User", secondary=user_vote, back_populates="post_votes"
     )
-    comments = db.relationship(
+    comments = mongo.db.relationship(
         "Comment", order_by="desc(Comment.timestamp)", back_populates="post"
     )
 
@@ -93,27 +93,27 @@ class Post(db.Model):
         if self.vote_count is None:
             self.vote_count = 0
         self.vote_count += amount
-        db.session.add(self)
+        mongo.db.session.add(self)
 
     def up_vote(self, user):
         if self.already_voted(user):
             return
         self.user_votes.append(user)
         self.adjust_vote(1)
-        db.session.commit()
+        mongo.db.session.commit()
 
     def down_vote(self, user):
         if self.already_voted(user):
             return
         self.user_votes.append(user)
         self.adjust_vote(-1)
-        db.session.commit()
+        mongo.db.session.commit()
 
     def add_comment(self, comment, user):
         comment = Comment(body=comment,
                           user_id=user.id)
         self.comments.append(comment)
-        db.session.commit()
+        mongo.db.session.commit()
         comment.up_vote(user)
         return comment
 
@@ -121,23 +121,23 @@ class Post(db.Model):
         return len(self.comments)
 
 
-class Category(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(64), index=True, unique=True)
-    posts = db.relationship(
+class Category(UserMixin, mongo.db.Model):
+    id = mongo.db.Column(mongo.db.Integer, primary_key=True)
+    title = mongo.db.Column(mongo.db.String(64), index=True, unique=True)
+    posts = mongo.db.relationship(
         "Post", order_by="desc(Post.timestamp)", backref="category", lazy="dynamic"
     )
 
 
-class Comment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    body = db.Column(db.Text)
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
-    post_id = db.Column(db.Integer, db.ForeignKey("post.id"))
-    post = db.relationship("Post", back_populates="comments")
-    vote_count = db.Column(db.Integer, default=0)
-    user_votes = db.relationship(
+class Comment(mongo.db.Model):
+    id = mongo.db.Column(mongo.db.Integer, primary_key=True)
+    body = mongo.db.Column(mongo.db.Text)
+    timestamp = mongo.db.Column(mongo.db.DateTime, index=True, default=datetime.utcnow)
+    user_id = mongo.db.Column(mongo.db.Integer, mongo.db.ForeignKey("user.id"))
+    post_id = mongo.db.Column(mongo.db.Integer, mongo.db.ForeignKey("post.id"))
+    post = mongo.db.relationship("Post", back_populates="comments")
+    vote_count = mongo.db.Column(mongo.db.Integer, default=0)
+    user_votes = mongo.db.relationship(
         "User", secondary=comment_vote, back_populates="comment_votes"
     )
 
@@ -154,28 +154,28 @@ class Comment(db.Model):
         if self.vote_count is None:
             self.vote_count = 0
         self.vote_count += amount
-        db.session.add(self)
+        mongo.db.session.add(self)
 
     def up_vote(self, user):
         if self.already_voted(user):
             return
         self.user_votes.append(user)
         self.adjust_vote(1)
-        db.session.commit()
+        mongo.db.session.commit()
 
     def down_vote(self, user):
         if self.already_voted(user):
             return
         self.user_votes.append(user)
         self.adjust_vote(-1)
-        db.session.commit()
+        mongo.db.session.commit()
 
 
-class ActivityLog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
-    details = db.Column(db.Text)
+class ActivityLog(mongo.db.Model):
+    id = mongo.db.Column(mongo.db.Integer, primary_key=True)
+    timestamp = mongo.db.Column(mongo.db.DateTime, index=True, default=datetime.utcnow)
+    user_id = mongo.db.Column(mongo.db.Integer, mongo.db.ForeignKey("user.id"))
+    details = mongo.db.Column(mongo.db.Text)
 
     def __repr__(self):
         return f"<ActivityLog id {self.id} - {self.details[:20]}>"
@@ -187,8 +187,8 @@ class ActivityLog(db.Model):
     @classmethod
     def log_event(cls, user_id, details):
         e = cls(user_id=user_id, details=details)
-        db.session.add(e)
-        db.session.commit()
+        mongo.db.session.add(e)
+        mongo.db.session.commit()
 
 
 @login.user_loader
