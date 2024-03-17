@@ -1,13 +1,23 @@
+import requests
 from datetime import datetime
-
 from flask import flash, redirect, render_template, request, url_for
-
 from flask_login import current_user, login_required, login_user, logout_user
-
 from app import app, db
 from app.forms import CommentForm, LoginForm, PostForm, RegistrationForm
 from app.models import ActivityLog, Category, Comment, Post, User
 
+def log_activity_to_microservice(user_id, details):
+    activity_data = {
+        'user_id': user_id,
+        'details': details,
+        'timestamp': datetime.utcnow().isoformat() + 'Z'
+    }
+    try:
+        response = requests.post('http://127.0.0.1:5000/api/activities', json=activity_data)
+        response.raise_for_status()  
+        print("Activity logged successfully to microservice.")
+    except requests.RequestException as e:
+        print(f"Failed to log activity to microservice: {e}")
 
 def greeting_name():
     greeting_name = "Anonymous"
@@ -49,7 +59,7 @@ def login():
             flash("Invalid username or password")
             return redirect(url_for("login"))
         login_user(user, remember=form.remember_me.data)
-        ActivityLog.log_event(user.id, f"Login {user}")
+        log_activity_to_microservice(user.id, f"Login {user}")
         return redirect(url_for("index"))
     elif form.is_submitted():
         return redirect(url_for("login"))
@@ -61,7 +71,7 @@ def login():
 
 @app.route("/logout")
 def logout():
-    ActivityLog.log_event(current_user.id, f"Logout {current_user}")
+    log_activity_to_microservice(current_user.id, f"Logout {current_user}")
     logout_user()
     return redirect(url_for("index"))
 
@@ -95,7 +105,7 @@ def create_post():
         )
         db.session.add(post)
         db.session.commit()
-        ActivityLog.log_event(current_user.id, f"Create: {post}")
+        log_activity_to_microservice(current_user.id, f"Create: {post}")
         flash("Your post is now live!")
         return redirect(url_for("index"))
     return render_template(
@@ -116,7 +126,7 @@ def register():
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        ActivityLog.log_event(user.id, "Register")
+        log_activity_to_microservice(user.id, "Register")
         flash("Congratulations, you are now a registered user!")
         return redirect(url_for("login"))
     return render_template(
@@ -182,7 +192,7 @@ def up_vote(post_id):
     if current_user.is_authenticated:
         post = Post.query.filter_by(id=post_id).first_or_404()
         post.up_vote(current_user)
-        ActivityLog.log_event(current_user.id, f"Up Vote: {post}")
+        log_activity_to_microservice(current_user.id, f"Up Vote: {post}")
         return redirect(next_page or url_for("index"))
     else:
         return redirect(url_for("login"))
@@ -194,7 +204,7 @@ def down_vote(post_id):
     if current_user.is_authenticated:
         post = Post.query.filter_by(id=post_id).first_or_404()
         post.down_vote(current_user)
-        ActivityLog.log_event(current_user.id, f"Down Vote: {post}")
+        log_activity_to_microservice(current_user.id, f"Down Vote: {post}")
         return redirect(next_page or url_for("index"))
     else:
         return redirect(url_for("login"))
@@ -206,7 +216,7 @@ def up_vote_comment(comment_id):
     if current_user.is_authenticated:
         comment = Comment.query.filter_by(id=comment_id).first_or_404()
         comment.up_vote(current_user)
-        ActivityLog.log_event(current_user.id, f"Up Vote: {comment}")
+        log_activity_to_microservice(current_user.id, f"Up Vote: {comment}")
         return redirect(next_page or url_for("index"))
     else:
         return redirect(url_for("login"))
@@ -218,7 +228,7 @@ def down_vote_comment(comment_id):
     if current_user.is_authenticated:
         comment = Comment.query.filter_by(id=comment_id).first_or_404()
         comment.down_vote(current_user)
-        ActivityLog.log_event(current_user.id, f"Down Vote: {comment}")
+        log_activity_to_microservice(current_user.id, f"Down Vote: {comment}")
         return redirect(next_page or url_for("index"))
     else:
         return redirect(url_for("login"))
